@@ -1,0 +1,54 @@
+name: Hourly RV relocation monitor
+
+on:
+  schedule:
+    # GitHub bruger UTC. Minut 17 spreder belastningen væk fra hele klokkeslæt.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: rv-relocation-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore seen-deals history
+        uses: actions/cache/restore@v4
+        with:
+          path: .state
+          key: rv-monitor-${{ github.run_id }}
+          restore-keys: |
+            rv-monitor-
+
+      - name: Check for new deals
+        env:
+          TARGET_START: "2026-12-01"
+          TARGET_END: "2027-01-31"
+          MIN_CAPACITY: "3"
+          SMTP_HOST: smtp.gmail.com
+          SMTP_PORT: "465"
+          SMTP_USE_SSL: "true"
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.SMTP_USER }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python monitor.py
+
+      - name: Save seen-deals history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .state
+          key: rv-monitor-${{ github.run_id }}
